@@ -4,11 +4,18 @@ import android.util.Log
 import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.interaction.DragInteraction
+import androidx.compose.foundation.interaction.Interaction
+import androidx.compose.foundation.interaction.collectIsDraggedAsState
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -16,6 +23,9 @@ import androidx.compose.material3.ScrollableTabRow
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.ui.Alignment.Companion.Center
 import androidx.compose.ui.Alignment.Companion.CenterVertically
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -24,6 +34,9 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.flow.collect
 import kotlin.math.roundToInt
 
 private const val TAG = "CenterTabLayout"
@@ -32,10 +45,30 @@ private const val TAG = "CenterTabLayout"
 fun CenterTabLayout(
     modifier: Modifier = Modifier,
     contentColor: Color = Color.DarkGray,
+    selectedIndex: Int = 0,
+    coroutineScope: CoroutineScope = rememberCoroutineScope(),
     scrollState: ScrollState = rememberScrollState(),
-    onCenterItemChanged: () -> Unit = {},
     tabs: @Composable () -> Unit
 ) {
+    val centerTabLayoutState = rememberCenterTabLayoutState(
+        coroutineScope,
+        scrollState
+    )
+    LaunchedEffect(key1 = Unit) {
+        centerTabLayoutState.centerItemIndex.collect {
+            Log.d(TAG, "CenterTabLayout: centerItemIndex $it")
+        }
+    }
+    LaunchedEffect(key1 = Unit) {
+        var lastInteraction: Interaction? = null
+        centerTabLayoutState.scrollState.interactionSource.interactions.collect { new ->
+            if (lastInteraction is DragInteraction.Start && new !is DragInteraction.Start) {
+                centerTabLayoutState.scrollToCenterOfIndex(centerTabLayoutState.centerItemIndex.value)
+            }
+            lastInteraction = new
+        }
+    }
+
     Surface(
         modifier = modifier,
         color = contentColor
@@ -50,7 +83,7 @@ fun CenterTabLayout(
             }
             SubcomposeLayout(
                 modifier = Modifier
-                    .horizontalScroll(scrollState)
+                    .horizontalScroll(centerTabLayoutState.scrollState)
             ) { constraints ->
                 Log.d(TAG, "CenterTabLayout: parentConstraint $constraints ")
                 val tabMeasurables = subcompose("TABS", tabs)
@@ -64,7 +97,6 @@ fun CenterTabLayout(
                 val tabPlaceables = tabMeasurables.map {
                     it.measure(tabConstraints)
                 }
-
 
                 tabPlaceables.forEach {
                     Log.d(TAG, "CenterTabLayout: width  ${it.width}")
@@ -89,10 +121,18 @@ fun CenterTabLayout(
                 layout(layoutWidth, layoutHeight) {
                     Log.d(TAG, "CenterTabLayout: containerWidth $containerWidth")
                     var left = startPadding
+                    val tabPositions = mutableListOf<TabPosition>()
                     tabPlaceables.forEachIndexed { index, placeable ->
                         placeable.placeRelative(left, 0)
+                        tabPositions.add(TabPosition(left, placeable.width))
                         left += placeable.width
                     }
+
+                    centerTabLayoutState.onLaidOut(
+                        totalTabRowWidth = layoutWidth,
+                        visibleWidth = containerWidth,
+                        tabPositions = tabPositions
+                    )
                 }
             }
         }
@@ -102,29 +142,29 @@ fun CenterTabLayout(
 @Preview
 @Composable
 private fun CenterTabLayoutPreview() {
-    CenterTabLayout(
-        modifier = Modifier.height(200.dp).background(Color.Yellow)
+    Box(
+        modifier = Modifier.height(200.dp).fillMaxWidth()
     ) {
-        Surface(
-            modifier = Modifier,
-            color = Color.Red
+        CenterTabLayout(
+            modifier = Modifier.fillMaxSize()
         ) {
-            Column() {
-                Text(text = "sss")
-                Text(text = "sss")
-                Text(text = "sss")
+            Box(
+                modifier = Modifier.background(Color.Red, shape = CircleShape)
+            ) {
+                Text(text = "bbbbbb", color = Color.Green)
+            }
+            Box(
+                modifier = Modifier.background(Color.Green, shape = CircleShape)
+            ) {
+                Text(text = "ccccc")
+            }
+            Box(
+                modifier = Modifier.background(Color.Green, shape = CircleShape)
+            ) {
+                Text(text = "dddddd")
             }
         }
-        Box(
-            modifier = Modifier.background(Color.Red, shape = CircleShape)
-        ) {
-            Text(text = "bbbbbb", color = Color.Green)
-        }
-        Box(
-            modifier = Modifier.background(Color.Green, shape = CircleShape)
-        ) {
-            Text(text = "ccccc")
-        }
+        Spacer(modifier = Modifier.fillMaxHeight().width(2.dp).background(Color.Yellow).align(Center))
     }
 }
 
@@ -157,4 +197,3 @@ private fun TabOffPreview() {
         }
     }
 }
-
