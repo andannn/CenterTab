@@ -10,17 +10,17 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.launch
 
 @Composable
-fun rememberCenterTabLayoutState(
+fun rememberLensLayoutState(
     coroutineScope: CoroutineScope,
     scrollState: ScrollState,
     initialSelectedIndex: Int = 0
 ) = remember(key1 = coroutineScope, key2 = scrollState) {
-    CenterTabLayoutState(coroutineScope, scrollState, initialSelectedIndex)
+    LensLayoutState(coroutineScope, scrollState, initialSelectedIndex)
 }
 
 private const val TAG = "CenterTabLayoutState"
 
-class CenterTabLayoutState(
+class LensLayoutState(
     private val coroutineScope: CoroutineScope,
     val scrollState: ScrollState,
     private val initialSelectedIndex: Int

@@ -18,23 +18,24 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.unit.dp
-import com.example.centertab.ui.theme.CenterTabTheme
+import com.example.centertab.ui.theme.LensLayoutTheme
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContent {
-            CenterTabTheme {
+            LensLayoutTheme {
                 var selectedIndex by remember {
                     mutableStateOf(2)
                 }
                 Surface(modifier = Modifier.fillMaxSize()) {
-                    CenterTabLayout(
+                    LensLayout(
                         modifier = Modifier.fillMaxSize(),
                         selectedIndex = selectedIndex,
                         onScrollFinishToSelectIndex = {
                             selectedIndex = it
-                        }
+                        },
+                        animeState = AnimationState.COLLAPASED
                     ) {
                         repeat(6) { index ->
                             Tab(
