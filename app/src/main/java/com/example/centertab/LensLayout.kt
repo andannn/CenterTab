@@ -1,22 +1,27 @@
 package com.example.centertab
 
+import android.graphics.RectF
+import android.os.Build
+import androidx.annotation.RequiresApi
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.updateTransition
 import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.getValue
@@ -29,8 +34,10 @@ import androidx.compose.ui.Alignment.Companion.Center
 import androidx.compose.ui.Alignment.Companion.CenterHorizontally
 import androidx.compose.ui.Alignment.Companion.CenterVertically
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Paint
+import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.layout.ParentDataModifier
 import androidx.compose.ui.layout.SubcomposeLayout
 import androidx.compose.ui.platform.LocalDensity
@@ -44,7 +51,9 @@ import com.example.centertab.ui.theme.LensLayoutTheme
 import kotlinx.coroutines.CoroutineScope
 import kotlin.math.roundToInt
 
-private val LENS_LAYOUT_FULLY_EXPANDED_WIDTH = 900
+
+private val LENS_LAYOUT_FULLY_EXPANDED_WIDTH = 1900
+private const val PointIntervalWidth = 10f
 private const val TAG = "LensLayout"
 
 /**
@@ -55,6 +64,7 @@ private const val TAG = "LensLayout"
  * @param coroutineScope coroutineScope to do scroll operation.
  * @param lens composabel tabs to put in this layout.
  */
+@RequiresApi(Build.VERSION_CODES.Q)
 @Composable
 fun LensLayout(
     modifier: Modifier = Modifier,
@@ -122,15 +132,36 @@ fun LensLayout(
 
             layout(layoutWidth, layoutHeight) {
                 var left = horizonPadding
+                val insufficientAreaList = mutableListOf<ClosedFloatingPointRange<Float>>()
 
                 lensPlaceables.forEachIndexed { index, placeable ->
                     val shrinkStart = left
                     val startFactor = lensItemData.getOrNull(index)?.startFactor!!
                     val halfWidth = placeable.width.div(2f)
                     val expandStart = (startFactor * expandWidth - halfWidth).roundToInt()
-                    val start = lerp(shrinkStart, expandStart, layoutRatio) + horizonPadding
+                    val startInLensLayout = lerp(shrinkStart, expandStart, layoutRatio)
+                    val endInLensLayout = startInLensLayout + placeable.width
+                    val start = startInLensLayout + horizonPadding
                     placeable.placeRelative(start, 0)
                     left += placeable.width
+
+                    insufficientAreaList.add(
+                        startInLensLayout.div(lensLayoutWidth.toFloat()).rangeTo(
+                            endInLensLayout.div(lensLayoutWidth.toFloat())
+                        )
+                    )
+                }
+
+                subcompose("Tint") {
+                    InsufficientBackgroundTint(insufficientAreaList = insufficientAreaList)
+                }.forEach {
+                    it.measure(
+                        constraints.copy(
+                            maxWidth = lensLayoutWidth,
+                            maxHeight = layoutHeight
+                        )
+                    )
+                        .placeRelative(x = horizonPadding, y = 0)
                 }
             }
         }
@@ -157,6 +188,65 @@ object LensItemScope {
     }
 }
 
+@RequiresApi(Build.VERSION_CODES.Q)
+@Composable
+private fun InsufficientBackgroundTint(
+    modifier: Modifier = Modifier,
+    insufficientAreaList: List<ClosedFloatingPointRange<Float>>,
+    tintColor: Color = Color.Red
+) {
+    Spacer(
+        modifier = modifier
+            .fillMaxSize()
+            .drawBehind {
+                val insufficientAreas = insufficientAreaList
+                    .map {
+                        val start = (size.width * it.start)
+                        val end = (size.width * it.endInclusive)
+                        start.rangeTo(end)
+                    }
+
+                // draw background tint.
+                val pointsSize = (size.width / PointIntervalWidth).roundToInt()
+                val ptsArray: FloatArray = FloatArray(
+                    pointsSize * 2
+                ) { index ->
+                    if (index % 2 == 0) {
+                        (index / 2) * PointIntervalWidth // x
+                    } else {
+                        center.y // y
+                    }
+                }
+                val canvas = drawContext.canvas.nativeCanvas
+                val paint = Paint()
+                    .apply {
+                        strokeWidth = 3f
+                        color = tintColor
+                    }
+                    .asFrameworkPaint()
+
+                val count = canvas.saveLayer(null, paint)
+                canvas.drawPoints(
+                    ptsArray,
+                    paint
+                )
+                paint.blendMode = android.graphics.BlendMode.DST_OUT
+                insufficientAreas.onEach { range ->
+                    canvas.drawRect(
+                        RectF(
+                            range.start,
+                            0f,
+                            range.start + range.endInclusive - range.start,
+                            size.height
+                        ),
+                        paint
+                    )
+                }
+                canvas.restoreToCount(count)
+            }
+    )
+}
+
 private class LensItemParentData(
     val startFactor: Float
 ) : ParentDataModifier {
@@ -174,10 +264,27 @@ object ZoomRatioToPxPolicy {
     fun zoomRatioToPx(ratio: Float, startZoomRatio: Float) {
 
     }
-
-
 }
 
+@RequiresApi(Build.VERSION_CODES.Q)
+@Preview
+@Composable
+private fun InsufficientBackgroundTintPreview() {
+    LensLayoutTheme {
+        Surface {
+            InsufficientBackgroundTint(
+                modifier = Modifier
+                    .height(90.dp)
+                    .width(280.dp),
+                insufficientAreaList = listOf(
+                    0.2f.rangeTo(0.3f)
+                )
+            )
+        }
+    }
+}
+
+@RequiresApi(Build.VERSION_CODES.Q)
 @Preview
 @Composable
 private fun LensLayoutPreview() {
@@ -186,12 +293,14 @@ private fun LensLayoutPreview() {
             mutableStateOf(2)
         }
         var state by remember {
-            mutableStateOf(AnimationState.COLLAPSED)
+            mutableStateOf(AnimationState.EXPANDED)
         }
 
-        Box(modifier = Modifier
-            .fillMaxSize()
-            .padding(3.dp)) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(3.dp)
+        ) {
             LensLayout(
                 modifier = Modifier
                     .widthIn(min = 20.dp, max = 400.dp)
