@@ -1,6 +1,5 @@
 package com.example.centertab
 
-import android.util.Log
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.updateTransition
 import androidx.compose.foundation.ScrollState
@@ -16,6 +15,8 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.getValue
@@ -28,6 +29,7 @@ import androidx.compose.ui.Alignment.Companion.Center
 import androidx.compose.ui.Alignment.Companion.CenterHorizontally
 import androidx.compose.ui.Alignment.Companion.CenterVertically
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ParentDataModifier
 import androidx.compose.ui.layout.SubcomposeLayout
@@ -35,17 +37,14 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.Density
-import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.lerp
 import androidx.compose.ui.util.lerp
 import com.example.centertab.LensItemScope.lensItem
 import com.example.centertab.ui.theme.LensLayoutTheme
 import kotlinx.coroutines.CoroutineScope
-import kotlin.math.exp
 import kotlin.math.roundToInt
 
-private val LENS_LAYOUT_FULLY_EXPANDED_WIDTH = 500
+private val LENS_LAYOUT_FULLY_EXPANDED_WIDTH = 900
 private const val TAG = "LensLayout"
 
 /**
@@ -66,8 +65,6 @@ fun LensLayout(
     animeState: AnimationState,
     lens: @Composable () -> Unit
 ) {
-    val onScrollFinishToSelectIndexState = rememberUpdatedState(onScrollFinishToSelectIndex)
-
     val layoutState = rememberLensLayoutState(
         coroutineScope = coroutineScope,
         scrollState = scrollState,
@@ -82,9 +79,10 @@ fun LensLayout(
         modifier = modifier
             .wrapContentHeight(align = CenterVertically)
     ) {
+        // Always calculate position according to this layoutRatio.
         val layoutRatio by transation.animateFloat(label = "lens_layout_width") { state ->
             when (state) {
-                AnimationState.COLLAPASED -> 0f
+                AnimationState.COLLAPSED -> 0f
                 AnimationState.EXPANDED -> 1f
             }
         }
@@ -102,7 +100,7 @@ fun LensLayout(
                 maxOf(acc, measurable.maxIntrinsicHeight(Constraints.Infinity))
             }
 
-            val lensConstraints = constraints.copy(minWidth = 50, minHeight = layoutHeight)
+            val lensConstraints = constraints.copy(minHeight = layoutHeight)
 
             val lensItemData = lensMeasurables
                 .map { it.parentData as? LensItemParentData }
@@ -117,11 +115,11 @@ fun LensLayout(
             val expandWidth = LENS_LAYOUT_FULLY_EXPANDED_WIDTH
             val lensLayoutWidth = lerp(shrinkWidth, expandWidth, layoutRatio)
 
+            // Start/end padding is 0 when totally shrink.
             val horizonPadding = (containerWidth.div(2) * layoutRatio).roundToInt()
 
             val layoutWidth = lensLayoutWidth + (horizonPadding * 2)
 
-            Log.d(TAG, "LensLayout:  horizonPadding $horizonPadding")
             layout(layoutWidth, layoutHeight) {
                 var left = horizonPadding
 
@@ -141,10 +139,6 @@ fun LensLayout(
 
 @Immutable
 object LensItemScope {
-    sealed interface LensItem {
-        data class SingleLens(val zoomRatio: Float) : LensItem
-        data class RangeLens(val startZoomRatio: Float, val endZoomRatio: Float) : LensItem
-    }
 
     fun Modifier.lensItem(
         lensItem: LensItem,
@@ -170,8 +164,18 @@ private class LensItemParentData(
 }
 
 enum class AnimationState {
-    COLLAPASED,
+    COLLAPSED,
     EXPANDED
+}
+
+object ZoomRatioToPxPolicy {
+
+
+    fun zoomRatioToPx(ratio: Float, startZoomRatio: Float) {
+
+    }
+
+
 }
 
 @Preview
@@ -182,50 +186,65 @@ private fun LensLayoutPreview() {
             mutableStateOf(2)
         }
         var state by remember {
-            mutableStateOf(AnimationState.COLLAPASED)
+            mutableStateOf(AnimationState.COLLAPSED)
         }
 
-        Box(modifier = Modifier.fillMaxSize()) {
+        Box(modifier = Modifier
+            .fillMaxSize()
+            .padding(3.dp)) {
             LensLayout(
                 modifier = Modifier
-                    .widthIn(min = 20.dp, max = 300.dp)
+                    .widthIn(min = 20.dp, max = 400.dp)
                     .align(Center)
-                    .background(Color.Blue),
+                    .background(
+                        color = MaterialTheme.colorScheme.inverseSurface,
+                        shape = CircleShape
+                    )
+                    .padding(3.dp),
                 selectedIndex = selectedIndex,
                 onScrollFinishToSelectIndex = {
                     selectedIndex = it
                 },
                 animeState = state
             ) {
-                Box(modifier = Modifier
-                    .padding(horizontal = 10.dp)
-                    .size(50.dp)
-                    .background(Color.Red)
-                    .lensItem(
-                        lensItem = LensItemScope.LensItem.SingleLens(0.2f),
-                        lensLayoutRatioRange = 0.2f..0.8f
-                    )
-                    .clickable {
-                        if (state == AnimationState.COLLAPASED) {
+                SingleLensItem(
+                    modifier = Modifier
+                        .lensItem(
+                            lensItem = LensItem.SingleLens(0.3f),
+                            lensLayoutRatioRange = 0.2f..4.8f
+                        ),
+                    lensItem = LensItem.SingleLens(0.3f),
+                    onClick = {
+                        if (state == AnimationState.COLLAPSED) {
                             state = AnimationState.EXPANDED
                         } else {
-                            state = AnimationState.COLLAPASED
+                            state = AnimationState.COLLAPSED
                         }
-                    })
-                Box(modifier = Modifier
-                    .size(50.dp)
-                    .background(Color.Green)
-                    .lensItem(
-                        lensItem = LensItemScope.LensItem.SingleLens(0.7f),
-                        lensLayoutRatioRange = 0.2f..0.8f
-                    )
-                    .clickable {
-                        if (state == AnimationState.COLLAPASED) {
+                    }
+                )
+                SingleLensItem(
+                    modifier = Modifier
+                        .lensItem(
+                            lensItem = LensItem.SingleLens(1.0f),
+                            lensLayoutRatioRange = 0.2f..4.8f
+                        ),
+                    lensItem = LensItem.SingleLens(1.0f),
+                    onClick = {
+                        if (state == AnimationState.COLLAPSED) {
                             state = AnimationState.EXPANDED
                         } else {
-                            state = AnimationState.COLLAPASED
+                            state = AnimationState.COLLAPSED
                         }
-                    })
+                    }
+                )
+                RangeLensItem(
+                    modifier = Modifier
+                        .lensItem(
+                            lensItem = LensItem.RangeLens(3.8f, 5.2f),
+                            lensLayoutRatioRange = 0.2f..4.8f
+                        ),
+                    lensItem = LensItem.RangeLens(3.8f, 5.2f)
+                )
             }
         }
     }

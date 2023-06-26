@@ -35,7 +35,7 @@ class MainActivity : ComponentActivity() {
                         onScrollFinishToSelectIndex = {
                             selectedIndex = it
                         },
-                        animeState = AnimationState.COLLAPASED
+                        animeState = AnimationState.COLLAPSED
                     ) {
                         repeat(6) { index ->
                             Tab(
